@@ -25,18 +25,20 @@ module el2_veer_wrapper
 import el2_pkg::*;
  #(
 `include "el2_param.vh"
-   , parameter [31:0] RESET_VEC = `RV_RESET_VEC
 )
 (
    input logic                             clk,
    input logic                             rst_l,
    input logic                             dbg_rst_l,
    input logic                             nmi_int,
-   // jtag_id and nmi_vec are supposed to be tied to constants in the top level
+   // nmi_vec is supposed to be tied to a constant in the top level
    /*pragma coverage off*/
    input logic [31:1]                      nmi_vec,
-   input logic [31:1]                      jtag_id,
    /*pragma coverage on*/
+   // Reset vector. Formerly sourced from the RSTVEC TDR in the TAP; now driven by
+   // the integrator (e.g. from dmi_wrapper's rst_vec output, or tied to RV_RESET_VEC).
+   // Must be stable while rst_l is deasserted.
+   input logic [31:1]                      rst_vec,
 
 
    output logic [31:0]                     trace_rv_i_insn_ip,
@@ -394,13 +396,19 @@ import el2_pkg::*;
    output logic                            dec_tlu_perfcnt2,
    output logic                            dec_tlu_perfcnt3,
 
-   // ports added by the soc team
-   input logic                             jtag_tck,    // JTAG clk
-   input logic                             jtag_tms,    // JTAG TMS
-   input logic                             jtag_tdi,    // JTAG tdi
-   input logic                             jtag_trst_n, // JTAG Reset
-   output logic                            jtag_tdo,    // JTAG TDO
-   output logic                            jtag_tdoEn,  // JTAG Test Data Output enable
+   // DMI upstream (Debug Module Interface), in the clk domain, reset by dbg_rst_l.
+   // Driven by a DTM outside the wrapper (e.g. dmi_wrapper: rvjtag_tap +
+   // dmi_jtag_to_core_sync). Contract, as provided by dmi_jtag_to_core_sync:
+   //  - dmi_en / dmi_wr_en are single-cycle pulses synchronous to clk
+   //  - dmi_addr / dmi_wdata are held stable from before the pulse until the
+   //    next access (they are not synchronized)
+   //  - dmi_rdata is valid from the cycle after a read pulse until the next access;
+   //    a DTM in another clock domain samples it quasi-statically
+   input logic                             dmi_en,      // DMI access (read or write)
+   input logic                             dmi_wr_en,   // DMI write
+   input logic                      [ 6:0] dmi_addr,    // DMI address
+   input logic                      [31:0] dmi_wdata,   // DMI write data
+   output logic                     [31:0] dmi_rdata,   // DMI read data
 
    /*pragma coverage off*/
    input logic [31:4] core_id,
@@ -860,19 +868,11 @@ import el2_pkg::*;
 `endif //  `ifdef RV_BUILD_AHB_LITE
 
    // DMI (core)
-   logic                   dmi_en;
-   logic [6:0]             dmi_addr;
-   logic                   dmi_wr_en;
-   logic [31:0]            dmi_wdata;
-   logic [31:0]            dmi_rdata;
-
-   // DMI (core)
    logic                   dmi_reg_en;
    logic [6:0]             dmi_reg_addr;
    logic                   dmi_reg_wr_en;
    logic [31:0]            dmi_reg_wdata;
    logic [31:0]            dmi_reg_rdata;
-   logic [31:1]            dmi_rst_vec;
 
 `ifdef RV_LOCKSTEP_REGFILE_ENABLE
    el2_regfile_if regfile ();
@@ -881,7 +881,7 @@ import el2_pkg::*;
    // Instantiate the el2_veer core
    el2_veer #(.pt(pt)) veer (
                                 .clk(clk),
-                                .rst_vec(dmi_rst_vec),
+                                .rst_vec(rst_vec),
 `ifdef RV_LOCKSTEP_REGFILE_ENABLE
                                 .regfile(regfile.veer_rf_src),
 `endif
@@ -895,7 +895,7 @@ import el2_pkg::*;
 
    el2_veer_lockstep #(.pt(pt)) lockstep (
                                 .clk(clk),
-                                .rst_vec(dmi_rst_vec),
+                                .rst_vec(rst_vec),
 `ifdef RV_LOCKSTEP_REGFILE_ENABLE
                                 .main_core_regfile(regfile.veer_rf_sink),
 `endif // `ifdef RV_LOCKSTEP_REGFILE_ENABLE
@@ -912,31 +912,6 @@ import el2_pkg::*;
                              .*
                              );
 
-
-   logic unused_dmi_hard_reset;
-   //  JTAG/DMI instance
-   dmi_wrapper #(
-    .RESET_VEC   (RESET_VEC)
-   ) dmi_wrapper (
-    // JTAG signals
-    .trst_n      (jtag_trst_n),     // JTAG reset
-    .tck         (jtag_tck),        // JTAG clock
-    .tms         (jtag_tms),        // Test mode select
-    .tdi         (jtag_tdi),        // Test Data Input
-    .tdo         (jtag_tdo),        // Test Data Output
-    .tdoEnable   (jtag_tdoEn),      // Test Data Output enable
-    // Processor Signals
-    .core_rst_n  (dbg_rst_l),       // Debug reset, active low
-    .core_clk    (clk),             // Core clock
-    .jtag_id     (jtag_id),         // JTAG ID
-    .rd_data     (dmi_rdata),       // Read data from  Processor
-    .reg_wr_data (dmi_wdata),       // Write data to Processor
-    .reg_wr_addr (dmi_addr),        // Write address to Processor
-    .reg_en      (dmi_en),          // Write interface bit to Processor
-    .reg_wr_en   (dmi_wr_en),       // Write enable to Processor
-    .rst_vec     (dmi_rst_vec),
-    .dmi_hard_reset   (unused_dmi_hard_reset)
-   );
 
    // DMI core/uncore mux
    dmi_mux dmi_mux (

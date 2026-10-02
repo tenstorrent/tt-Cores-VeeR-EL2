@@ -415,6 +415,36 @@ module veer_wrapper
   assign mem_export.ic_tag_data_raw_packed_pre = ic_tag_data_raw_packed_pre;
   assign mem_export.ic_tag_data_raw_pre = ic_tag_data_raw_pre;
 
+  // JTAG DTM, now outside el2_veer_wrapper
+  logic        dmi_en;
+  logic        dmi_wr_en;
+  logic [ 6:0] dmi_addr;
+  logic [31:0] dmi_wdata;
+  logic [31:0] dmi_rdata;
+  logic [31:1] rst_vec;
+  logic        unused_dmi_hard_reset;
+
+  dmi_wrapper dmi_wrapper (
+      // JTAG signals
+      .trst_n        (jtag_trst_n),
+      .tck           (jtag_tck),
+      .tms           (jtag_tms),
+      .tdi           (jtag_tdi),
+      .tdo           (jtag_tdo),
+      .tdoEnable     (jtag_tdoEn),
+      // Processor signals
+      .core_rst_n    (dbg_rst_l),
+      .core_clk      (clk),
+      .jtag_id       (jtag_id),
+      .rd_data       (dmi_rdata),
+      .reg_wr_data   (dmi_wdata),
+      .reg_wr_addr   (dmi_addr),
+      .reg_en        (dmi_en),
+      .reg_wr_en     (dmi_wr_en),
+      .rst_vec       (rst_vec),
+      .dmi_hard_reset(unused_dmi_hard_reset)
+  );
+
   el2_veer_wrapper rvtop (
       .el2_mem_export(mem_export.veer_sram_src),
       .el2_icache_export(mem_export.veer_icache_src),

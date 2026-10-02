@@ -839,27 +839,30 @@ Signals which are asynchronous to the core complex clock (`clk`) are marked with
 * - trace_rv_i_tval_ip[31:0]
   - out
   - Exception trap value
-* - **Debug JTAG Port**
+* - **Debug Module Interface (DMI)**
   -
   -
-* - jtag_tck
+* - dmi_en
   - in
-  - JTAG Test Clock (async)
-* - jtag_tms
+  - DMI access request, single-cycle pulse (sync to clk)
+* - dmi_wr_en
   - in
-  - JTAG Test Mode Select (async, sync to jtag_tck)
-* - jtag_tdi
+  - DMI write, qualifies dmi_en (sync to clk)
+* - dmi_addr[6:0]
   - in
-  - JTAG Test Data In (async, sync to jtag_tck)
-* - jtag_trst_n
+  - DMI register address (quasi-static, stable before dmi_en until the next access)
+* - dmi_wdata[31:0]
   - in
-  - JTAG Test Reset (async)
-* - jtag_tdo
+  - DMI write data (quasi-static, stable before dmi_en until the next access)
+* - dmi_rdata[31:0]
   - out
-  - JTAG Test Data Out (async, sync to jtag_tck)
-* - jtag_id[31:1]
+  - DMI read data (valid from the cycle after dmi_en until the next access)
+* - **Reset Vector**
+  -
+  -
+* - rst_vec[31:1]
   - in
-  - JTAG IDCODE register value (bit 0 tied internally to 1)
+  - Core reset vector. May be driven by the `rst_vec` output of the external JTAG DTM (`dmi_wrapper`) or tied to a constant
 * - **Testing**
   -
   -
